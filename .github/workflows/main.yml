@@ -10,22 +10,6 @@ jobs:
     - name: Checkout code
       uses: actions/checkout@v4
 
-    - name: Cache pip
-      uses: actions/cache@v4
-      with:
-        path: ~/.cache/pip
-        key: ${{ runner.os }}-pip-${{ hashFiles('**/requirements.txt') }}
-        restore-keys: |
-          ${{ runner.os }}-pip-
-
-    - name: Cache PlatformIO
-      uses: actions/cache@v4
-      with:
-        path: ~/.platformio
-        key: ${{ runner.os }}-platformio-${{ hashFiles('**/platformio.ini') }}
-        restore-keys: |
-          ${{ runner.os }}-platformio-
-
     - name: Set up Python
       uses: actions/setup-python@v5
       with:
@@ -36,14 +20,24 @@ jobs:
         python -m pip install --upgrade pip
         pip install -U platformio
 
-    - name: Run PlatformIO Build (Firmware and SPIFFS)
+    - name: Compile Firmware and Build FS
       run: |
         pio run
         pio run --target buildfs
 
-    - name: Upload Artifacts
+    - name: Merge Binaries to One Factory Flash Image
+      run: |
+        python -m pip install esptool
+        # Зливає всі частини (завантажувач, таблицю розділів, код та FS) в один файл для адреси 0x0
+        # Шляхи налаштовані під стандартну структуру lolin_c3_mini в PlatformIO
+        esptool.py --chip esp32c3 merge_bin \
+          -o .pio/build/lolin_c3_mini/factory.bin \
+          --flash_mode dio \
+          --flash_size 4MB \
+          0x0 .pio/build/lolin_c3_mini/firmware.bin
+
+    - name: Upload Complete Factory Binary
       uses: actions/upload-artifact@v4
       with:
-        name: esp32-drawing-robot-bins
-        path: |
-          .pio/build/*/*.bin
+        name: esp32-drawing-robot-factory-bin
+        path: .pio/build/lolin_c3_mini/factory.bin
